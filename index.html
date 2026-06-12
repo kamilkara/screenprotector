@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fullscreen Photo Slideshow</title>
+  <!-- Staatliches for date/time; Anurati for day overlay -->
+  <link href="https://fonts.googleapis.com/css2?family=Staatliches&display=swap" rel="stylesheet">
+  <style>
+    @font-face {
+      font-family: 'Anurati';
+      src: url('Anurati.ttf') format('truetype');
+    }
+    * { margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+    #viewer {
+      width: 100vw; height: 100vh;
+      background-position: center center;
+      background-size: cover;
+      transition: background-image 1s ease-out;
+    }
+    #overlay {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      text-align: center; color: rgba(255,255,255,0.9);
+      pointer-events: none; z-index: 1000;
+    }
+    #overlay .day {
+      font-family: 'Anurati', sans-serif;
+      font-size: 96px; letter-spacing: 12px; line-height: 1;
+      text-transform: uppercase;
+      -webkit-text-stroke: 1px rgba(0,0,0,0.5);
+      text-shadow: 0 0 4px rgba(0,0,0,0.8);
+    }
+    #overlay .datetime {
+      font-family: 'Staatliches', sans-serif;
+      font-size: 36px; margin-top: 8px;
+      -webkit-text-stroke: 0.6px rgba(0,0,0,0.5);
+      text-shadow: 0 0 2px rgba(0,0,0,0.8);
+    }
+    #counter {
+      position: fixed; bottom: 20px; right: 20px;
+      color: rgba(255,255,255,0.8);
+      font-family: sans-serif; font-size: 14px;
+      z-index: 1000;
+    }
+    #download-btn {
+      position: fixed; bottom: 20px; left: 20px;
+      padding: 8px 12px; font-family: sans-serif; font-size: 14px;
+      color: #fff; background: rgba(255,255,255,0.2);
+      backdrop-filter: blur(8px);
+      border: none; border-radius: 6px; cursor: pointer;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewer"></div>
+  <div id="overlay">
+    <div class="day" id="overlay-day"></div>
+    <div class="datetime" id="overlay-datetime"></div>
+  </div>
+  <div id="counter"></div>
+  <button id="download-btn">Open Image</button>
+  <script>
+    const WIDTH = window.screen.width;
+    const HEIGHT = window.screen.height;
+    const SOURCES = ['picsum', 'flickr', 'px500'];
+    let index = 0, currentUrl = '';
+
+    function getRandomPicsum() {
+      return `https://picsum.photos/${WIDTH}/${HEIGHT}?random=${Date.now()}`;
+    }
+
+    async function getFlickrImage() {
+      try {
+        const res = await fetch('https://www.flickr.com/services/feeds/photos_public.gne?format=json&nojsoncallback=1');
+        const data = await res.json();
+        const item = data.items[Math.floor(Math.random() * data.items.length)];
+        return item.media.m.replace('_m.', '_b.');
+      } catch {
+        return null;
+      }
+    }
+
+    async function get500pxImage() {
+      try {
+        const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://500px.com/popular.rss');
+        const xmlText = await (await fetch(proxy)).text();
+        const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
+        const items = xml.querySelectorAll('item');
+        const rand = items[Math.floor(Math.random() * items.length)];
+        return rand.querySelector('enclosure')?.getAttribute('url') || null;
+      } catch {
+        return null;
+      }
+    }
+
+    async function fetchRandomImage() {
+      const src = SOURCES[index++ % SOURCES.length];
+      if (src === 'picsum') return getRandomPicsum();
+      if (src === 'flickr') return await getFlickrImage();
+      return await get500pxImage();
+    }
+
+    async function showImage() {
+      const url = await fetchRandomImage();
+      if (url) {
+        currentUrl = url;
+        document.getElementById('viewer').style.backgroundImage = `url('${url}')`;
+        document.getElementById('counter').textContent = new Date().toLocaleTimeString(navigator.language, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' — ' + url;
+      }
+    }
+
+    function updateOverlay() {
+      const now = new Date();
+      const locale = navigator.language;
+      const day = now.toLocaleDateString(locale, { weekday: 'long' }).toUpperCase();
+      const date = now.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+      const time = now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false });
+      document.getElementById('overlay-day').textContent = day;
+      document.getElementById('overlay-datetime').textContent = `${date} - ${time}`;
+    }
+
+    document.getElementById('download-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!currentUrl) return;
+      const a = document.createElement('a');
+      a.href = currentUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => window.focus(), 100);
+    });
+
+    window.addEventListener('load', async () => {
+      await showImage();
+      updateOverlay();
+      setInterval(showImage, 10000);
+      setInterval(updateOverlay, 60000);
+    });
+  </script>
+</body>
+</html>
